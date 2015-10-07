@@ -31,13 +31,13 @@
 #  Data disks can be partitioned and formatted as seperate disks or in a RAID0 configuration
 #  The scrtip will scan for unpartitioined and unformatted data disks and partition, format, and add fstab entries
 # Parameters :
-#  1 - b: The base directory for mount points (default: /trakcare)
+#  1 - b: The base directory for mount points (default: /trak)
 #  2 - s  Create a striped RAID0 Array (No redundancy)
 #  3 - h  Help 
 # Note : 
 # This script has only been tested on Ubuntu 12.04 LTS and must be root
 #
-# MO - 07 Oct 2015 - change default base dir to /trakcare
+# MO - 07 Oct 2015 - change default base dir to /trak
 
 
 help()
@@ -45,7 +45,7 @@ help()
     echo "Usage: $(basename $0) [-b data_base] [-h] [-s]"
     echo ""
     echo "Options:"
-    echo "   -b         base directory for mount points (default: /trakcare)"
+    echo "   -b         base directory for mount points (default: /trak)"
     echo "   -h         this help message"
     echo "   -s         create a striped RAID array (no redundancy)"
 }
@@ -68,7 +68,7 @@ fi
 BLACKLIST="/dev/sda|/dev/sdb"
 
 # Base path for data disk mount points
-DATA_BASE="/trakcare"
+DATA_BASE="/trak"
 
 while getopts b:sh optname; do
     log "Option $optname set with value ${OPTARG}"
