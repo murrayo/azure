@@ -1,0 +1,413 @@
+{
+  "$schema": "http://schema.management.azure.com/schemas/2015-01-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "storageAccountNamePrefix": {
+      "type": "string",
+      "defaultValue": "iscperfstorage"
+    },
+    "storageAccountTypeData": {
+      "type": "string",
+      "defaultValue": "Premium_LRS",
+      "allowedValues": [ "Standard_LRS", "Standard_ZRS", "Standard_GRS", "Standard_RAGRS", "Premium_LRS" ]
+    },
+    "virtualNetworkName": {
+      "type": "string",
+      "defaultValue": "iscperfvnet"
+    },
+    "namePrefix": {
+      "type": "string",
+      "defaultValue": "iscperf"
+    },
+    "adminUserName": {
+      "type": "string",
+      "defaultValue": "trakadmin"
+    },
+    "adminPassword": {
+      "type": "securestring",
+      "defaultValue": "TrakSydney1"
+    },
+    "azureLocation": {
+      "type": "string",
+      "defaultValue": "West US"
+    },
+    "dbNodeCount": {
+      "type": "int",
+      "defaultValue": 1
+    },
+    "vmSize": {
+      "type": "string",
+      "defaultValue": "Standard_DS13"
+    }
+  },
+  "variables": {
+    "imagePublisher": "SUSE",
+    "imageOffer": "SLES",
+    "OSVersion": "11-SP4",
+    "vnetID": "[resourceId('Microsoft.Network/virtualNetworks',parameters('virtualNetworkName'))]",
+    "NetworkSecurityGroupName": "[concat(parameters('virtualNetworkName'),'-SecurityGroup')]",
+    "addressPrefix": "10.0.0.0/16",
+    "subnet0Name": "Subnet-0",
+    "subnet0Prefix": "10.0.0.0/24",
+    "subnet0Ref": "[concat(variables('vnetID'),'/subnets/',variables('subnet0Name'))]",
+    "publicIPAddressMethod": "Dynamic",
+    "dataDiskSize": 1023,
+    "scriptUrl": "https://gist.githubusercontent.com/murrayo/52e9a2bea2832258cbcb/raw/c3fec67a6a8eb1f3bc1fbe939368334a9b9c45a5/lvmsetup.sh",
+    "customScriptCommandToExecute": "bash lvmsetup.sh -s"
+  },
+  "resources": [
+    {
+      "type": "Microsoft.Storage/storageAccounts",
+      "name": "[parameters('storageAccountNamePrefix')]",
+      "apiVersion": "2015-05-01-preview",
+      "location": "[parameters('azureLocation')]",
+      "tags": {
+        "displayName": "StorageAccount"
+      },
+      "properties": {
+        "accountType": "[parameters('storageAccountTypeData')]"
+      }
+    }, // Storage Account
+    {
+      "apiVersion": "2015-05-01-preview",
+      "type": "Microsoft.Network/networkSecurityGroups",
+      "name": "[variables('NetworkSecurityGroupName')]",
+      "location": "[parameters('azureLocation')]",
+      "tags": {
+        "displayName": "NetworkSecurityGroup"
+      },
+      "properties": {
+        "securityRules": [
+          {
+            "name": "ssh_rule",
+            "properties": {
+              "description": "Allow SSH access",
+              "protocol": "*",
+              "sourcePortRange": "*",
+              "destinationPortRange": "22",
+              "sourceAddressPrefix": "*",
+              "destinationAddressPrefix": "*",
+              "access": "Allow",
+              "priority": 100,
+              "direction": "Inbound"
+            }
+          },
+          {
+            "name": "http_rule",
+            "properties": {
+              "description": "Allow HTTP access",
+              "protocol": "*",
+              "sourcePortRange": "*",
+              "destinationPortRange": "80",
+              "sourceAddressPrefix": "*",
+              "destinationAddressPrefix": "*",
+              "access": "Allow",
+              "priority": 101,
+              "direction": "Inbound"
+            }
+          },
+          {
+            "name": "https_rule",
+            "properties": {
+              "description": "Allow HTTPS access",
+              "protocol": "*",
+              "sourcePortRange": "*",
+              "destinationPortRange": "443",
+              "sourceAddressPrefix": "*",
+              "destinationAddressPrefix": "*",
+              "access": "Allow",
+              "priority": 102,
+              "direction": "Inbound"
+            }
+          },
+          {
+            "name": "cache_superserver_rule",
+            "properties": {
+              "description": "Allow Caché SuperServer port access",
+              "protocol": "*",
+              "sourcePortRange": "*",
+              "destinationPortRange": "1972",
+              "sourceAddressPrefix": "*",
+              "destinationAddressPrefix": "*",
+              "access": "Allow",
+              "priority": 103,
+              "direction": "Inbound"
+            }
+          },
+          {
+            "name": "cache_webserver_rule",
+            "properties": {
+              "description": "Allow Caché Web Server port access",
+              "protocol": "*",
+              "sourcePortRange": "*",
+              "destinationPortRange": "57772",
+              "sourceAddressPrefix": "*",
+              "destinationAddressPrefix": "*",
+              "access": "Allow",
+              "priority": 104,
+              "direction": "Inbound"
+            }
+          },
+          {
+            "name": "cache_mirrorserver_rule",
+            "properties": {
+              "description": "Allow Caché Mirror port access",
+              "protocol": "*",
+              "sourcePortRange": "*",
+              "destinationPortRange": "2188",
+              "sourceAddressPrefix": "*",
+              "destinationAddressPrefix": "*",
+              "access": "Allow",
+              "priority": 105,
+              "direction": "Inbound"
+            }
+          }
+        ]
+      }
+    }, // Network Security Group
+    {
+      "apiVersion": "2015-05-01-preview",
+      "type": "Microsoft.Network/virtualNetworks",
+      "name": "[parameters('virtualNetworkName')]",
+      "location": "[parameters('azureLocation')]",
+      "dependsOn": [
+        "[concat('Microsoft.Network/networkSecurityGroups/', variables('NetworkSecurityGroupName'))]"
+      ],
+      "tags": {
+        "displayName": "VirtualNetwork"
+      },
+      "properties": {
+        "addressSpace": {
+          "addressPrefixes": [
+            "[variables('addressPrefix')]"
+          ]
+        },
+        "subnets": [
+          {
+            "name": "[variables('subnet0Name')]",
+            "properties": {
+              "addressPrefix": "[variables('subnet0Prefix')]",
+              "networkSecurityGroup": {
+                "id": "[resourceId('Microsoft.Network/networkSecurityGroups', variables('NetworkSecurityGroupName'))]"
+              }
+            }
+          },
+        ]
+      }
+    }, // Virtual Network
+
+    /// Remote access over internet
+    {
+      "apiVersion": "2015-05-01-preview",
+      "type": "Microsoft.Network/publicIPAddresses",
+      "name": "[concat(parameters('namePrefix'),'db', copyIndex())]",
+      "location": "[parameters('azureLocation')]",
+      "tags": {
+        "displayName": "PublicIPAddress"
+      },
+      "copy": {
+        "name": "supPublicIPCopy",
+        "count": "[parameters('dbNodeCount')]"
+      },
+      "properties": {
+        "publicIPAllocationMethod": "[variables('publicIPAddressMethod')]",
+        "dnsSettings": {
+          "domainNameLabel": "[concat(parameters('namePrefix'),'db', copyIndex())]"
+        }
+      }
+    }, // Public IP address
+
+    /// DB Mirror Servers x 1
+    {
+      "apiVersion": "2015-05-01-preview",
+      "type": "Microsoft.Network/networkInterfaces",
+      "name": "[concat(parameters('namePrefix'),'db',copyIndex(),'nic1')]",
+      "location": "[parameters('azureLocation')]",
+      "tags": {
+        "displayName": "NetworkInterface"
+      },
+      "dependsOn": [
+        "[concat('Microsoft.Network/virtualNetworks/', parameters('virtualNetworkName'))]"
+      ],
+      "copy": {
+        "name": "dbNicCopy",
+        "count": "[parameters('dbNodeCount')]"
+      },
+      "properties": {
+        "ipConfigurations": [
+          {
+            "name": "ipconfig1",
+            "properties": {
+              "privateIPAllocationMethod": "Dynamic",
+              "publicIPAddress": {
+                "id": "[resourceId('Microsoft.Network/publicIPAddresses',concat(parameters('namePrefix'),'db', copyIndex()))]"
+              },
+              "subnet": {
+                "id": "[variables('subnet0Ref')]"
+              }
+            }
+          }
+        ]
+      }
+    }, // Network Interface #1 with public IP and private IP
+ {
+      "apiVersion": "2015-05-01-preview",
+      "type": "Microsoft.Compute/virtualMachines",
+      "name": "[concat(parameters('namePrefix'),'db', copyIndex())]",
+      "location": "[parameters('azureLocation')]",
+      "tags": {
+        "displayName": "VirtualMachine"
+      },
+      "dependsOn": [
+        "[concat('Microsoft.Storage/storageAccounts/', parameters('storageAccountNamePrefix'))]",
+        "[concat('Microsoft.Network/networkInterfaces/', concat(parameters('namePrefix'),'db', copyIndex(),'nic1'))]"
+      ],
+      "copy": {
+        "name": "dbVmCopy",
+        "count": "[parameters('dbNodeCount')]"
+      },
+      "properties": {
+        "hardwareProfile": {
+          "vmSize": "[parameters('vmSize')]"
+        },
+        "osProfile": {
+          "computerName": "[concat(parameters('namePrefix'),'db', copyIndex())]",
+          "adminUsername": "[parameters('adminUsername')]",
+          "adminPassword": "[parameters('adminPassword')]"
+        },
+        "storageProfile": {
+          "imageReference": {
+            "publisher": "[variables('imagePublisher')]",
+            "offer": "[variables('imageOffer')]",
+            "sku": "[variables('OSVersion')]",
+            "version": "latest"
+          },
+          "osDisk": {
+            "name": "osdisk",
+            "vhd": {
+              "uri": "[concat('http://',parameters('storageAccountNamePrefix'),'.blob.core.windows.net/vhds/',parameters('namePrefix'),'-','db', copyIndex(),'-osdisk.vhd')]"
+            },
+            "caching": "ReadWrite",
+            "createOption": "FromImage"
+          },
+          "dataDisks": [
+            {
+              "name": "datadisk0",
+              "diskSizeGB": "[variables('dataDiskSize')]",
+              "lun": 0,
+              "vhd": {
+                "Uri": "[concat('http://', parameters('storageAccountNamePrefix'), '.blob.core.windows.net/vhds/', concat(parameters('namePrefix'),'db', copyIndex()), '-datadisk0.vhd')]"
+              },
+              "caching": "None",
+              "createOption": "Empty"
+            },
+            {
+              "name": "datadisk1",
+              "diskSizeGB": "[variables('dataDiskSize')]",
+              "lun": 1,
+              "vhd": {
+                "Uri": "[concat('http://', parameters('storageAccountNamePrefix'), '.blob.core.windows.net/vhds/', concat(parameters('namePrefix'),'db', copyIndex()), '-datadisk1.vhd')]"
+              },
+              "caching": "None",
+              "createOption": "Empty"
+            },
+            {
+              "name": "datadisk2",
+              "diskSizeGB": "[variables('dataDiskSize')]",
+              "lun": 2,
+              "vhd": {
+                "Uri": "[concat('http://', parameters('storageAccountNamePrefix'), '.blob.core.windows.net/vhds/', concat(parameters('namePrefix'),'db', copyIndex()), '-datadisk2.vhd')]"
+              },
+              "caching": "None",
+              "createOption": "Empty"
+            },
+            {
+              "name": "datadisk3",
+              "diskSizeGB": "[variables('dataDiskSize')]",
+              "lun": 3,
+              "vhd": {
+                "Uri": "[concat('http://', parameters('storageAccountNamePrefix'), '.blob.core.windows.net/vhds/', concat(parameters('namePrefix'),'db', copyIndex()), '-datadisk3.vhd')]"
+              },
+              "caching": "None",
+              "createOption": "Empty"
+            },
+            {
+              "name": "datadisk4",
+              "diskSizeGB": "[variables('dataDiskSize')]",
+              "lun": 4,
+              "vhd": {
+                "Uri": "[concat('http://', parameters('storageAccountNamePrefix'), '.blob.core.windows.net/vhds/', concat(parameters('namePrefix'),'db', copyIndex()), '-datadisk4.vhd')]"
+              },
+              "caching": "None",
+              "createOption": "Empty"
+            },
+            {
+              "name": "datadisk5",
+              "diskSizeGB": "[variables('dataDiskSize')]",
+              "lun": 5,
+              "vhd": {
+                "Uri": "[concat('http://', parameters('storageAccountNamePrefix'), '.blob.core.windows.net/vhds/', concat(parameters('namePrefix'),'db', copyIndex()), '-datadisk5.vhd')]"
+              },
+              "caching": "None",
+              "createOption": "Empty"
+            },
+            {
+              "name": "datadisk6",
+              "diskSizeGB": "[variables('dataDiskSize')]",
+              "lun": 6,
+              "vhd": {
+                "Uri": "[concat('http://', parameters('storageAccountNamePrefix'), '.blob.core.windows.net/vhds/', concat(parameters('namePrefix'),'db', copyIndex()), '-datadisk6.vhd')]"
+              },
+              "caching": "None",
+              "createOption": "Empty"
+            },
+            {
+              "name": "datadisk7",
+              "diskSizeGB": "[variables('dataDiskSize')]",
+              "lun": 7,
+              "vhd": {
+                "Uri": "[concat('http://', parameters('storageAccountNamePrefix'), '.blob.core.windows.net/vhds/', concat(parameters('namePrefix'),'db', copyIndex()), '-datadisk7.vhd')]"
+              },
+              "caching": "None",
+              "createOption": "Empty"
+            }
+          ]
+        },
+        "networkProfile": {
+          "networkInterfaces": [
+            {
+              "id": "[resourceId('Microsoft.Network/networkInterfaces',concat(parameters('namePrefix'),'db',copyIndex(),'nic1'))]"
+            }
+          ]
+        }
+      }
+    }, // Virtual Machines
+    {
+      "type": "Microsoft.Compute/virtualMachines/extensions",
+      "name": "[concat(parameters('namePrefix'),'db', copyIndex(), '/init')]",
+      "apiVersion": "2015-05-01-preview",
+      "location": "[parameters('azureLocation')]",
+      "tags": {
+        "displayName": "customScriptExtension"
+      },
+      "dependsOn": [
+        "[concat('Microsoft.Compute/virtualMachines/', concat(parameters('namePrefix'),'db', copyIndex()))]"
+      ],
+      "copy": {
+        "name": "dbVmExtensionCopy",
+        "count": "[parameters('dbNodeCount')]"
+      },
+      "properties": {
+        "publisher": "Microsoft.OSTCExtensions",
+        "type": "CustomScriptForLinux",
+        "typeHandlerVersion": "1.2",
+        "settings": {
+          "fileUris": [
+            "[variables('scriptUrl')]"
+          ],
+          "commandToExecute": "[variables('customScriptCommandToExecute')]"
+        }
+      }
+    } // Execute custom OS shell script
+  ]
+}
